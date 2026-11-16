@@ -8,17 +8,5 @@
     "Shipped a Godot game for NASA Space Apps 2026.",
     "Also: crypto protocols, MIPS assembly, networking, automation tools.",
     "Looking for student roles."
-  ],
-  "skip_languages": [
-    "Batchfile",
-    "Dockerfile",
-    "Shell",
-    "GDShader"
-  ],
-  "featured": {
-    "Shay-Rafe3-Nasa-Space-App-Challenge": "Team game for NASA Space Apps 2026, built in Godot.",
-    "SecureChannel-Crypto": "",
-    "max-clique-mips": "",
-    "Networking-UDP-Game": "Multiplayer game over raw UDP sockets in Python."
-  }
+  ]
 }

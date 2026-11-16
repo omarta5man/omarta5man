@@ -1,14 +1,9 @@
 """Draw the terminal-green profile cards into assets/.
 
-Run with GITHUB_TOKEN set (the Action passes its own token; locally:
-`GITHUB_TOKEN=$(gh auth token) python scripts/build.py`). Only public repos
-are read, so private project names never reach the profile.
+Run: `python scripts/build.py`. The text comes from profile.json.
 """
 
-import datetime as dt
 import json
-import os
-import urllib.request
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -32,40 +27,6 @@ C = {
     "yellow": "#ffbd2e",
     "lime": "#27c93f",
 }
-LEVELS = ["#0f1a11", "#0e4429", "#006d32", "#26a641", "#3dff7a"]
-LANG_SHADES = ["#3dff7a", "#26a641", "#ffb347", "#1b7f3f", "#9be9a8", "#2f4f38"]
-
-
-def gql(query: str) -> dict:
-    token = os.environ["GITHUB_TOKEN"]
-    req = urllib.request.Request(
-        "https://api.github.com/graphql",
-        data=json.dumps({"query": query}).encode(),
-        headers={"Authorization": f"bearer {token}", "User-Agent": "profile-cards"},
-    )
-    with urllib.request.urlopen(req, timeout=30) as r:
-        body = json.load(r)
-    if "errors" in body:
-        raise SystemExit(body["errors"])
-    return body["data"]
-
-
-def fetch() -> dict:
-    return gql(
-        """{ user(login: "%s") {
-          repositories(ownerAffiliations: OWNER, privacy: PUBLIC, first: 100) {
-            totalCount
-            nodes { name description url stargazerCount forkCount isFork
-              languages(first: 10, orderBy: {field: SIZE, direction: DESC}) { edges { size node { name } } } }
-          }
-          pullRequests(states: MERGED) { totalCount }
-          contributionsCollection {
-            totalCommitContributions totalPullRequestContributions totalIssueContributions
-            contributionCalendar { totalContributions weeks { contributionDays { date contributionCount } } }
-          }
-        } }"""
-        % LOGIN
-    )["user"]
 
 
 # ---------- drawing helpers ----------
@@ -172,95 +133,6 @@ def about():
     return frame(h, "~/about.txt", body)
 
 
-def stats(u):
-    cc = u["contributionsCollection"]
-    repos = [r for r in u["repositories"]["nodes"] if not r["isFork"]]
-    stars = sum(r["stargazerCount"] for r in repos)
-    skip = set(CONFIG.get("skip_languages", []))
-    langs: dict[str, int] = {}
-    for r in repos:
-        for e in r["languages"]["edges"]:
-            n = e["node"]["name"]
-            if n not in skip:
-                langs[n] = langs.get(n, 0) + e["size"]
-    total = sum(langs.values()) or 1
-    top = sorted(langs.items(), key=lambda kv: -kv[1])[:5]
-    other = total - sum(v for _, v in top)
-    if other > 0:
-        top.append(("Other", other))
-
-    weeks = cc["contributionCalendar"]["weeks"][-53:]
-    h = 400
-    body = prompt(28, 62, f"gh stats --user {LOGIN} --year")
-    tiles = [
-        ("PUBLIC REPOS", len(repos)),
-        ("COMMITS", cc["totalCommitContributions"]),
-        ("PRS MERGED", u["pullRequests"]["totalCount"]),
-        ("STARS", stars),
-    ]
-    for i, (k, v) in enumerate(tiles):
-        x = 28 + i * 200
-        body += t(x, 100, k, C["dim"], 11, 700, extra='letter-spacing="2"')
-        body += f'<g filter="url(#glow)">{t(x, 140, v, C["green"], 36, 800)}</g>'
-    # language bar
-    x0, bw, y = 28, W - 56, 172
-    x = x0
-    for i, (n, v) in enumerate(top):
-        w = bw * v / total
-        body += f'<rect x="{x:.1f}" y="{y}" width="{max(w-2,1):.1f}" height="8" rx="2" fill="{LANG_SHADES[i % len(LANG_SHADES)]}"/>'
-        x += w
-    lx = x0
-    for i, (n, v) in enumerate(top):
-        label = f"{n} {100*v/total:.0f}%"
-        body += f'<rect x="{lx}" y="{y+22}" width="9" height="9" rx="2" fill="{LANG_SHADES[i % len(LANG_SHADES)]}"/>'
-        body += t(lx + 15, y + 31, label, C["text"], 12)
-        lx += len(label) * 7.4 + 34
-    # contribution grid
-    gy = 236
-    body += t(28, gy - 8, f"{cc['contributionCalendar']['totalContributions']} contributions in the last year", C["dim"], 12)
-    cell, gap = 11, 3
-    gx = 28 + (W - 56 - len(weeks) * (cell + gap)) / 2
-    peak = max([d["contributionCount"] for w_ in weeks for d in w_["contributionDays"]] + [1])
-    for wi, w_ in enumerate(weeks):
-        for d in w_["contributionDays"]:
-            dow = dt.date.fromisoformat(d["date"]).isoweekday() % 7
-            n = d["contributionCount"]
-            lvl = 0 if n == 0 else min(4, 1 + int(3 * n / peak))
-            body += (f'<rect x="{gx + wi*(cell+gap):.1f}" y="{gy + dow*(cell+gap)}" width="{cell}" height="{cell}" rx="2" '
-                     f'fill="{LEVELS[lvl]}"><title>{d["date"]}: {n}</title></rect>')
-    today = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    body += t(28, h - 22, f"# last sync {today}", C["dim"], 11)
-    lg = W - 28 - 5 * 14 - 70
-    body += t(lg - 8, h - 22, "less", C["dim"], 11, anchor="end")
-    for i, col in enumerate(LEVELS):
-        body += f'<rect x="{lg + i*14}" y="{h-32}" width="11" height="11" rx="2" fill="{col}"/>'
-    body += t(lg + 5 * 14 + 4, h - 22, "more", C["dim"], 11)
-    return frame(h, "~/activity — live", body)
-
-
-def repo_card(r, fallback_desc):
-    desc = (fallback_desc or r["description"] or "").strip()
-    words, rows, cur = desc.split(), [], ""
-    for wd in words:
-        if len(cur) + len(wd) + 1 > 46:
-            rows.append(cur)
-            cur = wd
-        else:
-            cur = f"{cur} {wd}".strip()
-    if cur:
-        rows.append(cur)
-    rows = rows[:3]
-    edges = r["languages"]["edges"]
-    lang = edges[0]["node"]["name"] if edges else "—"
-    w, h = 412, 150
-    body = t(22, 62, "~/", C["dim"], 15) + t(42, 62, r["name"][:38], C["green"], 15, 700)
-    for i, row in enumerate(rows):
-        body += t(22, 90 + i * 19, row, C["text"], 12.5)
-    body += f'<circle cx="27" cy="{h-21}" r="5" fill="{C["amber"]}"/>' + t(38, h - 17, lang, C["text"], 12)
-    body += t(w - 22, h - 17, f"★ {r['stargazerCount']}   ⑂ {r['forkCount']}", C["dim"], 12, anchor="end")
-    return frame(h, "repo", body, w)
-
-
 def footer():
     h = 64
     body = t(W / 2, 54, "[ process exited with code 0 ]  ·  thanks for visiting", C["dim"], 12, anchor="middle")
@@ -271,12 +143,7 @@ def footer():
 
 def main():
     ASSETS.mkdir(exist_ok=True)
-    u = fetch()
-    out = {"hero.svg": hero(), "about.svg": about(), "stats.svg": stats(u), "footer.svg": footer()}
-    by_name = {r["name"]: r for r in u["repositories"]["nodes"]}
-    for name, fallback in CONFIG["featured"].items():
-        if name in by_name:
-            out[f"repo-{name}.svg"] = repo_card(by_name[name], fallback)
+    out = {"hero.svg": hero(), "about.svg": about(), "footer.svg": footer()}
     for fn, svg in out.items():
         (ASSETS / fn).write_text(svg, encoding="utf-8")
     print("wrote", ", ".join(out))
