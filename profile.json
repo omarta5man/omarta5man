@@ -1,0 +1,24 @@
+{
+  "name": "Omar Takhman",
+  "tagline": "> Computer Engineering @ Birzeit University",
+  "subline": "// embedded · validation · automation · AI",
+  "about": [
+    "Computer Engineering student who likes code that touches hardware.",
+    "Building an ESP32 validation rig and a micromouse with my team.",
+    "Shipped a Godot game for NASA Space Apps 2026.",
+    "Also: crypto protocols, MIPS assembly, networking, automation tools.",
+    "Looking for student roles."
+  ],
+  "skip_languages": [
+    "Batchfile",
+    "Dockerfile",
+    "Shell",
+    "GDShader"
+  ],
+  "featured": {
+    "Shay-Rafe3-Nasa-Space-App-Challenge": "Team game for NASA Space Apps 2026, built in Godot.",
+    "SecureChannel-Crypto": "",
+    "max-clique-mips": "",
+    "Networking-UDP-Game": "Multiplayer game over raw UDP sockets in Python."
+  }
+}
